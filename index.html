@@ -8,25 +8,31 @@
     body { font-family: system-ui, sans-serif; margin: 16px; }
     textarea { width: 100%; box-sizing: border-box; }
     button { padding: 10px 16px; font-size: 16px; }
+    .hint { color:#666; font-size:14px; }
   </style>
 </head>
 <body>
   <h2>ご相談内容</h2>
-  <p>テキストを入力して「送信」すると、このトークに自動返信されます。</p>
+  <p class="hint">※必ずLINEのトーク内から開いてください（外部ブラウザでは送信できません）。</p>
   <textarea id="q" rows="6" placeholder="ここに入力"></textarea><br/><br/>
   <button id="send">送信</button>
 
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script>
-  // ★後でLIFF IDを入れます（手順③で取得してここに貼る）
-  const LIFF_ID = "2008041611-Pg0XjdD1;
+  // ← ここに LINE Developers の LIFF 画面で表示される「LIFF ID」を入れる（例： "2001234567-ABcdEf" ）
+  const LIFF_ID = "2008041611-Pg0XjdD1";
 
   async function boot() {
     await liff.init({ liffId: LIFF_ID });
 
-    // LINE内で開いていなければログイン＆必要スコープを要求
+    // LINEアプリ内で開いているかチェック（外部ブラウザだと送れません）
+    if (!liff.isInClient()) {
+      alert("LINEアプリ内のトークからこの画面を開いてください。");
+      return;
+    }
+
     if (!liff.isLoggedIn()) {
-      liff.login({ scope: ['profile','chat_message.write'] });
+      liff.login(); // スコープ設定は管理画面側。ここは単純にログインだけ
       return;
     }
 
@@ -34,23 +40,28 @@
       const text = document.getElementById('q').value.trim();
       if (!text) return alert('相談内容を入力してください。');
 
-      // （任意）ユーザーIDをサーバーへ渡したい場合
       const profile = await liff.getProfile();
 
-      // あなたのVercel APIにPOST（同一プロジェクトなら相対パスでOK）
+      // 同一ドメインに /api/ai がある前提（Vercel）
       const resp = await fetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userText: text, userId: profile.userId })
       });
+
+      if (!resp.ok) {
+        alert('サーバーエラー（/api/ai）です。管理者にご連絡ください。');
+        return;
+      }
+
       const data = await resp.json();
       const reply = data.aiReply || 'すみません、生成に失敗しました。';
 
-      // 同じトークに投稿（要 chat_message.write）
+      // 同じトークへ投稿（※LIFF設定で chat_message.write が必要）
       await liff.sendMessages([{ type: 'text', text: reply }]);
 
       alert('送信しました！このトークに返答が届いています。');
-      // 必要なら閉じる → liff.closeWindow();
+      // liff.closeWindow(); // 必要なら閉じる
     };
   }
   boot();
