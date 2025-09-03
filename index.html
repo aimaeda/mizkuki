@@ -1,0 +1,59 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>相談フォーム（LIFF）</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 16px; }
+    textarea { width: 100%; box-sizing: border-box; }
+    button { padding: 10px 16px; font-size: 16px; }
+  </style>
+</head>
+<body>
+  <h2>ご相談内容</h2>
+  <p>テキストを入力して「送信」すると、このトークに自動返信されます。</p>
+  <textarea id="q" rows="6" placeholder="ここに入力"></textarea><br/><br/>
+  <button id="send">送信</button>
+
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <script>
+  // ★後でLIFF IDを入れます（手順③で取得してここに貼る）
+  const LIFF_ID = "PASTE_YOUR_LIFF_ID_HERE";
+
+  async function boot() {
+    await liff.init({ liffId: LIFF_ID });
+
+    // LINE内で開いていなければログイン＆必要スコープを要求
+    if (!liff.isLoggedIn()) {
+      liff.login({ scope: ['profile','chat_message.write'] });
+      return;
+    }
+
+    document.getElementById('send').onclick = async () => {
+      const text = document.getElementById('q').value.trim();
+      if (!text) return alert('相談内容を入力してください。');
+
+      // （任意）ユーザーIDをサーバーへ渡したい場合
+      const profile = await liff.getProfile();
+
+      // あなたのVercel APIにPOST（同一プロジェクトなら相対パスでOK）
+      const resp = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userText: text, userId: profile.userId })
+      });
+      const data = await resp.json();
+      const reply = data.aiReply || 'すみません、生成に失敗しました。';
+
+      // 同じトークに投稿（要 chat_message.write）
+      await liff.sendMessages([{ type: 'text', text: reply }]);
+
+      alert('送信しました！このトークに返答が届いています。');
+      // 必要なら閉じる → liff.closeWindow();
+    };
+  }
+  boot();
+  </script>
+</body>
+</html>
